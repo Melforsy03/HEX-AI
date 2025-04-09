@@ -1,27 +1,42 @@
 import random
 import math
-from copy import deepcopy
+import heapq
 
 class Jugador:
     def __init__(self, jugador_id: int):
         self.jugador_id = jugador_id
         self.oponente_id = 2 if jugador_id == 1 else 1
-        self.profundidad_maxima = 2
 
     def jugar(self, tablero: 'TableroHex') -> tuple:
         movimientos_disponibles = tablero.obtener_movimientos_posibles()
+        total_libres = len(movimientos_disponibles)
+
+        if total_libres > 15:
+            profundidad = 1
+        elif total_libres > 8:
+            profundidad = 2
+        else:
+            profundidad = 3
+
+        movimientos_ordenados = self.ordenar_movimientos(movimientos_disponibles, tablero.tamano)
         mejor_puntaje = -math.inf
         mejor_movimiento = random.choice(movimientos_disponibles)
 
-        for movimiento in movimientos_disponibles:
-            tablero_simulado = deepcopy(tablero)
-            tablero_simulado.colocar_ficha(movimiento[0], movimiento[1], self.jugador_id)
-            puntaje = self.minimax(tablero_simulado, self.profundidad_maxima - 1, False, -math.inf, math.inf)
+        for movimiento in movimientos_ordenados:
+            fila, col = movimiento
+            tablero.simular_ficha(fila, col, self.jugador_id)
+            puntaje = self.minimax(tablero, profundidad - 1, False, -math.inf, math.inf)
+            tablero.deshacer_ficha(fila, col)
+
             if puntaje > mejor_puntaje:
                 mejor_puntaje = puntaje
                 mejor_movimiento = movimiento
 
         return mejor_movimiento
+
+    def ordenar_movimientos(self, movimientos, tam):
+        centro = tam // 2
+        return sorted(movimientos, key=lambda m: abs(m[0] - centro) + abs(m[1] - centro))
 
     def minimax(self, tablero, profundidad, es_maximizador, alfa, beta):
         if (profundidad == 0 or
@@ -29,14 +44,15 @@ class Jugador:
             tablero.hay_conexion(self.oponente_id)):
             return self.evaluar(tablero)
 
-        movimientos_posibles = tablero.obtener_movimientos_posibles()
+        movimientos = tablero.obtener_movimientos_posibles()
+        movimientos = self.ordenar_movimientos(movimientos, tablero.tamano)
 
         if es_maximizador:
             maximo = -math.inf
-            for movimiento in movimientos_posibles:
-                nuevo_tablero = deepcopy(tablero)
-                nuevo_tablero.colocar_ficha(movimiento[0], movimiento[1], self.jugador_id)
-                evaluacion = self.minimax(nuevo_tablero, profundidad - 1, False, alfa, beta)
+            for fila, col in movimientos:
+                tablero.simular_ficha(fila, col, self.jugador_id)
+                evaluacion = self.minimax(tablero, profundidad - 1, False, alfa, beta)
+                tablero.deshacer_ficha(fila, col)
                 maximo = max(maximo, evaluacion)
                 alfa = max(alfa, evaluacion)
                 if beta <= alfa:
@@ -44,10 +60,10 @@ class Jugador:
             return maximo
         else:
             minimo = math.inf
-            for movimiento in movimientos_posibles:
-                nuevo_tablero = deepcopy(tablero)
-                nuevo_tablero.colocar_ficha(movimiento[0], movimiento[1], self.oponente_id)
-                evaluacion = self.minimax(nuevo_tablero, profundidad - 1, True, alfa, beta)
+            for fila, col in movimientos:
+                tablero.simular_ficha(fila, col, self.oponente_id)
+                evaluacion = self.minimax(tablero, profundidad - 1, True, alfa, beta)
+                tablero.deshacer_ficha(fila, col)
                 minimo = min(minimo, evaluacion)
                 beta = min(beta, evaluacion)
                 if beta <= alfa:
@@ -55,22 +71,112 @@ class Jugador:
             return minimo
 
     def evaluar(self, tablero):
-        fichas_propias = sum(fila.count(self.jugador_id) for fila in tablero.tablero)
-        fichas_oponente = sum(fila.count(self.oponente_id) for fila in tablero.tablero)
-        return fichas_propias - fichas_oponente
+        def distancia_conexion(jugador_id):
+            tam = tablero.tamano
+            dist = [[math.inf] * tam for _ in range(tam)]
+            heap = []
+
+            if jugador_id == 1:
+                for col in range(tam):
+                    if tablero.tablero[0][col] in [0, jugador_id]:
+                        dist[0][col] = 0
+                        heapq.heappush(heap, (0, 0, col))
+            else:
+                for fila in range(tam):
+                    if tablero.tablero[fila][0] in [0, jugador_id]:
+                        dist[fila][0] = 0
+                        heapq.heappush(heap, (0, fila, 0))
+
+            direcciones = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, -1)]
+
+            while heap:
+                costo, fila, col = heapq.heappop(heap)
+                for df, dc in direcciones:
+                    nf, nc = fila + df, col + dc
+                    if 0 <= nf < tam and 0 <= nc < tam:
+                        celda = tablero.tablero[nf][nc]
+                        if celda == jugador_id:
+                            nuevo_costo = costo
+                        elif celda == 0:
+                            # penalización si hay enemigos alrededor
+                            enemigos = sum(
+                                1 for ddf, ddc in direcciones
+                                if 0 <= nf + ddf < tam and 0 <= nc + ddc < tam and
+                                tablero.tablero[nf + ddf][nc + ddc] == self.oponente_id
+                            )
+                            nuevo_costo = costo + 1 + enemigos * 0.5
+                        else:
+                            continue
+                        if nuevo_costo < dist[nf][nc]:
+                            dist[nf][nc] = nuevo_costo
+                            heapq.heappush(heap, (nuevo_costo, nf, nc))
+
+            if jugador_id == 1:
+                return min(dist[tam - 1][col] for col in range(tam))
+            else:
+                return min(dist[fila][tam - 1] for fila in range(tam))
+
+        def bonus_puentes(jugador_id):
+            tam = tablero.tamano
+            bonus = 0
+            direcciones = [(-1, 1), (1, -1), (-1, -1), (1, 1)]
+            for fila in range(tam):
+                for col in range(tam):
+                    if tablero.tablero[fila][col] == jugador_id:
+                        for df, dc in direcciones:
+                            nf, nc = fila + df * 2, col + dc * 2
+                            mf, mc = fila + df, col + dc
+                            if (
+                                0 <= nf < tam and 0 <= nc < tam and
+                                0 <= mf < tam and 0 <= mc < tam and
+                                tablero.tablero[nf][nc] == jugador_id and
+                                tablero.tablero[mf][mc] == 0
+                            ):
+                                bonus += 1  
+            return bonus
+
+        def bonus_centro(jugador_id):
+            tam = tablero.tamano
+            centro = tam // 2
+            score = 0
+            for fila in range(tam):
+                for col in range(tam):
+                    if tablero.tablero[fila][col] == jugador_id:
+                        dist_centro = abs(fila - centro) + abs(col - centro)
+                        score += max(0, 5 - dist_centro)  
+            return score
+
+    
+        d_propio = distancia_conexion(self.jugador_id)
+        d_oponente = distancia_conexion(self.oponente_id)
+
+        heuristica = (
+            (d_oponente - d_propio) * 10 +  # mantener la parte principal
+            bonus_puentes(self.jugador_id) * 3 -
+            bonus_puentes(self.oponente_id) * 2 +
+            bonus_centro(self.jugador_id) * 1 -
+            bonus_centro(self.oponente_id) * 1
+        )
+
+        return heuristica
 
 
 class TableroHex:
     def __init__(self, tamano: int):
         self.tamano = tamano
         self.tablero = [[0] * tamano for _ in range(tamano)]
-        self.fichas_por_jugador = {1: set(), 2: set()}
 
     def colocar_ficha(self, fila: int, columna: int, jugador_id: int) -> bool:
         if self.tablero[fila][columna] == 0:
             self.tablero[fila][columna] = jugador_id
             return True
         return False
+
+    def simular_ficha(self, fila: int, columna: int, jugador_id: int):
+        self.tablero[fila][columna] = jugador_id
+
+    def deshacer_ficha(self, fila: int, columna: int):
+        self.tablero[fila][columna] = 0
 
     def obtener_movimientos_posibles(self) -> list:
         vacios = []
@@ -105,25 +211,26 @@ class TableroHex:
                 return True
 
             for df, dc in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, -1)]:
-                nueva_fila, nueva_columna = fila + df, columna + dc
-                if 0 <= nueva_fila < self.tamano and 0 <= nueva_columna < self.tamano:
-                    if self.tablero[nueva_fila][nueva_columna] == jugador_id and (nueva_fila, nueva_columna) not in visitado:
-                        pila.append((nueva_fila, nueva_columna))
+                nf, nc = fila + df, columna + dc
+                if 0 <= nf < self.tamano and 0 <= nc < self.tamano:
+                    if self.tablero[nf][nc] == jugador_id and (nf, nc) not in visitado:
+                        pila.append((nf, nc))
 
         return False
+
 
 def mostrar_tablero(tablero):
     for fila in tablero.tablero:
         print(' '.join(str(celda) for celda in fila))
     print()
 
+
 if __name__ == "__main__":
-    # Inicializar el tablero y los jugadores
-    tablero = TableroHex(3)  # puedes cambiar el tamaño del tablero
+    tablero = TableroHex(5) 
     jugador1 = Jugador(1)
     jugador2 = Jugador(2)
-    
-    turno = 1  # Jugador 1 comienza
+
+    turno = 1
 
     while True:
         mostrar_tablero(tablero)
@@ -147,11 +254,7 @@ if __name__ == "__main__":
                 break
             turno = 1
 
-        # Si no hay más movimientos, es empate
         if not tablero.obtener_movimientos_posibles():
             mostrar_tablero(tablero)
             print("🤝 ¡Empate!")
             break
-
-
-          
