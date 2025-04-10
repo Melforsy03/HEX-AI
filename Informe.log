@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2024.3.6)  10 APR 2025 17:29
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2024.3.6)  10 APR 2025 17:37
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -423,20 +423,20 @@ LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-04>
  ***********
 Package rerunfilecheck Info: File `Informe.out' has not changed.
-(rerunfilecheck)             Checksum: F5262428C19768EA858135D14EE4F104;1839.
+(rerunfilecheck)             Checksum: C99DF549C518BBCEE2B091B6E3108EEA;1674.
  ) 
 Here is how much of TeX's memory you used:
- 13893 strings out of 474485
- 213649 string characters out of 5738979
+ 13888 strings out of 474485
+ 213580 string characters out of 5738979
  2065542 words of memory out of 5000000
- 35961 multiletter control sequences out of 15000+600000
+ 35957 multiletter control sequences out of 15000+600000
  567675 words of font info for 74 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,7n,79p,459b,2053s stack positions out of 10000i,1000n,20000p,200000b,200000s
  <C:\Users\Melani Forsythe\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi12.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi8.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr17.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr6.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt10.pfb><C:/Users/Melani Forsythe/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt12.pfb>
-Output written on Informe.pdf (4 pages, 122939 bytes).
+Output written on Informe.pdf (4 pages, 121507 bytes).
 PDF statistics:
- 164 PDF objects out of 1000 (max. 8388607)
- 58 named destinations out of 1000 (max. 500000)
- 81 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 160 PDF objects out of 1000 (max. 8388607)
+ 57 named destinations out of 1000 (max. 500000)
+ 73 words of extra memory for PDF output out of 10000 (max. 10000000)
 
