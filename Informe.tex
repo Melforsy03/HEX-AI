@@ -1,0 +1,174 @@
+
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\geometry{a4paper, margin=2.5cm}
+\title{Jugador Virtual Hex}
+\author{Melani Forsythe Matos \\ Carrera: Ciencias de la Computación \\ Grupo: C312}
+\date{\today}
+
+% Configuración para mostrar código fuente bonito
+\lstset{
+  backgroundcolor=\color{white},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray},
+  stringstyle=\color{orange},
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  breaklines=true,
+  frame=single,
+  captionpos=b
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Objetivo}
+Desarrollar un jugador virtual competitivo para el juego de Hex capaz de enfrentar oponentes avanzados, tomando decisiones estratégicas de forma eficiente tanto en tableros pequeños como grandes.
+
+\section{Estrategia General}
+El jugador utiliza una combinación de:
+\begin{itemize}
+  \item Algoritmo \textbf{Minimax} con poda \textbf{alfa-beta} para tomar decisiones.
+  \item \textbf{Evaluación heurística} adaptativa.
+  \item \textbf{Reconocimiento de patrones estratégicos}: puentes, doble amenaza.
+  \item \textbf{Paralelización} del cálculo usando múltiples núcleos.
+  \item \textbf{Caching} de estados con tabla de transposición.
+\end{itemize}
+
+\section{Implementación Paso a Paso}
+
+\subsection{1. Método principal: \texttt{play()}}
+Este método decide la jugada a realizar:
+
+\begin{lstlisting}[language=Python]
+def play(self, tablero):
+    movimientos = tablero.get_possible_moves()
+    profundidad = self.calcular_profundidad(len(movimientos))
+    args = [(self.jugador_id, tablero_flat, tam, mov, profundidad) for mov in movimientos]
+    resultados = executor.map(evaluar_movimiento_global, args)
+    return max(resultados)[1]
+\end{lstlisting}
+
+El método evalúa todas las jugadas posibles en paralelo y selecciona la mejor.
+
+\subsection{2. Algoritmo \texttt{minimax()} con poda alfa-beta}
+
+\begin{lstlisting}[language=Python]
+def minimax(self, tablero, profundidad, maximizador, alfa, beta):
+    if profundidad == 0 or tablero.check_connection(...):
+        return self.evaluar(tablero)
+    if maximizador:
+        ...
+    else:
+        ...
+\end{lstlisting}
+
+Busca la mejor jugada minimizando el error y evitando explorar ramas inútiles.
+
+\subsection{3. Evaluación heurística}
+
+La función \texttt{evaluar()} es fundamental para el rendimiento e inteligencia del jugador virtual. Esta función analiza el estado actual del tablero y devuelve un valor numérico que indica qué tan buena es esa posición para el jugador actual. Cuanto mayor es el valor, más favorable es.
+
+A continuación se describen cada uno de los componentes que conforman la heurística:
+
+\begin{itemize}
+  \item \textbf{Distancia mínima a la victoria}: Se calcula usando una versión simplificada de Dijkstra. Se trata de determinar la distancia más corta entre los dos bordes que el jugador necesita conectar. Esta distancia se penaliza o bonifica dependiendo de si es el jugador o su oponente.
+  \begin{lstlisting}[language=Python]
+  def distancia_conexion(jugador_id):
+      dist = [[inf] * tam for _ in range(tam)]
+      return min_distancia
+  \end{lstlisting}
+
+  \item \textbf{Amenaza del oponente}: Si el oponente está a una sola jugada de ganar, se devuelve un valor muy negativo. Esto fuerza al jugador a bloquear esa amenaza en lugar de hacer otra jugada.
+  \begin{lstlisting}[language=Python]
+  if distancia_oponente <= 1:
+      return -1000
+  \end{lstlisting}
+
+  \item \textbf{Control del centro}: Las casillas cerca del centro del tablero tienen más conexiones posibles, por lo tanto, se bonifican.
+  \begin{lstlisting}[language=Python]
+  for fila in range(tam):
+      for col in range(tam):
+          if tablero[fila][col] == jugador:
+              score += max(0, 5 - distancia_al_centro)
+  \end{lstlisting}
+
+  \item \textbf{Puentes seguros}: El jugador recibe puntos extra si hay dos fichas propias conectadas indirectamente con un hueco en el medio (estructura típica de Hex).
+  \begin{lstlisting}[language=Python]
+  if tablero[nf][nc] == jugador and tablero[mf][mc] == 0:
+      bonus += 1
+  \end{lstlisting}
+
+  \item \textbf{Amenazas dobles}: Si una jugada conecta dos grupos propios separados, se cuenta como una doble amenaza, lo cual complica la defensa del oponente.
+  \begin{lstlisting}[language=Python]
+  if conexiones_vecinas >= 2:
+      doble_amenaza += 1
+  \end{lstlisting}
+
+  \item \textbf{Adaptación a la etapa de juego}:
+  \begin{itemize}
+    \item En la \textbf{apertura}, se favorece el control del centro y el desarrollo.
+    \item En el \textbf{medio juego}, se balancea entre atacar y defender.
+    \item En el \textbf{final}, se prioriza la conexión directa y bloquear.
+  \end{itemize}
+\end{itemize}
+
+
+\textbf{Función completa de evaluación:}
+\begin{lstlisting}[language=Python]
+return (d_oponente - d_propio) * peso + 
+       centro_score +
+       puente_bonus * 3 +
+       doble_amenaza * 5 +
+       amenaza_oponente
+\end{lstlisting}
+
+Donde:
+\begin{itemize}
+  \item $d_{propio}$ y $d_{oponente}$ son distancias mínimas a la conexión (Dijkstra).
+  \item \texttt{puente\_bonus}: detecta estructuras tipo \texttt{X \_ X}.
+  \item \texttt{doble\_amenaza}: jugadas que conectan múltiples grupos.
+  \item \texttt{amenaza\_oponente}: penaliza si el oponente está a una jugada de ganar.
+\end{itemize}
+
+\subsection{4. Caching con tabla de transposición}
+
+\begin{lstlisting}[language=Python]
+key = hash(str(tablero.tablero))
+if key in transposition_table:
+    return transposition_table[key]
+\end{lstlisting}
+
+Se evita evaluar múltiples veces la misma posición del tablero.
+
+\section{Características Avanzadas}
+\begin{itemize}
+  \item \textbf{Puentes seguros}: conexión indirecta que garantiza continuidad.
+  \item \textbf{Amenazas dobles}: forzan al oponente a dividir su defensa.
+  \item \textbf{Control del centro}: bonificación en las primeras jugadas.
+  \item \textbf{Etapas del juego}: evaluación adaptativa (inicio, medio, final).
+\end{itemize}
+
+\section{Igualdad de Condiciones}
+Se eliminó toda aleatoriedad, garantizando que los dos jugadores sigan exactamente la misma lógica. Ambos usan la misma IA y heurística, permitiendo comparaciones justas.
+
+\section{Experiencia y Ajustes}
+Durante las pruebas se observó:
+
+\begin{itemize}
+  \item Jugador 2 parecía tener ventaja debido a las respuestas inmediatas: esto se equilibró mejorando la apertura del jugador 1 (jugada central).
+  \item Jugadas repetitivas entre jugadores: solucionado añadiendo evaluación contextual (dobles amenazas, puentes).
+  \item Se identificó la necesidad de caching y se optimizó.
+\end{itemize}
+
+\end{document}

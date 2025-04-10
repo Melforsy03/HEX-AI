@@ -2,6 +2,21 @@
 import random
 import math
 import heapq
+import concurrent.futures
+from hashlib import sha256
+
+transposition_table = {}
+
+def evaluar_movimiento_global(args):
+    jugador_id, tablero_flat, tamano, movimiento, profundidad = args
+    jugador = Player(jugador_id)
+    tablero = HexBoard(tamano)
+    tablero.tablero = [list(tablero_flat[i:i+tamano]) for i in range(0, len(tablero_flat), tamano)]
+    fila, col = movimiento
+    tablero.simular_ficha(fila, col, jugador_id)
+    jugador._profundidad_actual = profundidad
+    puntaje = jugador.minimax(tablero, profundidad - 1, False, -math.inf, math.inf)
+    return puntaje, movimiento
 
 class Player:
     def __init__(self, jugador_id: int):
@@ -13,7 +28,6 @@ class Player:
         total_libres = len(movimientos_disponibles)
         tam = tablero.tamano
 
-        # 1. Profundidad dinámica
         if total_libres >= 40:
             profundidad = 1
         elif total_libres >= 20:
@@ -21,39 +35,28 @@ class Player:
         else:
             profundidad = 3
 
-        # 2. Jugada estratégica inicial: centro
         if total_libres == tam * tam:
             centro = tam // 2
             if tablero.tablero[centro][centro] == 0:
                 return (centro, centro)
 
-        # 3. Buscar patrones estratégicos (puentes o escaleras) en primeros turnos
-        if total_libres >= tam * tam - 2:
-            patrones = self.buscar_puentes_y_escaleras(tablero)
-            if patrones:
-                return random.choice(patrones)
+        tablero_flat = sum(tablero.tablero, [])
+        args = [(self.jugador_id, tablero_flat, tam, mov, profundidad) for mov in movimientos_disponibles]
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            resultados = list(executor.map(evaluar_movimiento_global, args))
 
-        mejor_puntaje = -math.inf
-        mejor_movimiento = random.choice(movimientos_disponibles)
-
-        for movimiento in movimientos_disponibles:
-            fila, col = movimiento
-            tablero.simular_ficha(fila, col, self.jugador_id)
-            self._profundidad_actual = profundidad
-            puntaje = self.minimax(tablero, profundidad - 1, False, -math.inf, math.inf)
-            tablero.deshacer_ficha(fila, col)
-            if abs(puntaje - mejor_puntaje) < 0.01 and random.random() < 0.3:
-                mejor_puntaje = puntaje
-                mejor_movimiento = movimiento
-            elif puntaje > mejor_puntaje:
-                mejor_puntaje = puntaje
-                mejor_movimiento = movimiento
-
+        mejor_puntaje, mejor_movimiento = max(resultados, key=lambda x: x[0])
         return mejor_movimiento
 
     def minimax(self, tablero, profundidad, es_maximizador, alfa, beta):
+        key = self.generar_hash(tablero)
+        if key in transposition_table and transposition_table[key][0] >= profundidad:
+            return transposition_table[key][1]
+
         if profundidad == 0 or tablero.check_connection(self.jugador_id) or tablero.check_connection(self.oponente_id):
-            return self.evaluar(tablero)
+            score = self.evaluar(tablero)
+            transposition_table[key] = (profundidad, score)
+            return score
 
         movimientos = tablero.get_possible_moves()
 
@@ -67,6 +70,7 @@ class Player:
                 alfa = max(alfa, evaluacion)
                 if beta <= alfa:
                     break
+            transposition_table[key] = (profundidad, maximo)
             return maximo
         else:
             minimo = math.inf
@@ -78,10 +82,16 @@ class Player:
                 beta = min(beta, evaluacion)
                 if beta <= alfa:
                     break
+            transposition_table[key] = (profundidad, minimo)
             return minimo
+
+    def generar_hash(self, tablero):
+        plano = str(tablero.tablero)
+        return sha256(plano.encode()).hexdigest()
 
     def evaluar(self, tablero):
         tam = tablero.tamano
+        total_libres = sum(fila.count(0) for fila in tablero.tablero)
 
         def distancia_conexion(jugador_id):
             dist = [[math.inf] * tam for _ in range(tam)]
@@ -121,38 +131,56 @@ class Player:
             else:
                 return min(dist[fila][tam - 1] for fila in range(tam))
 
+        def contar_puentes(jugador_id):
+            bonus = 0
+            direcciones = [(-1, 1), (1, -1), (-1, -1), (1, 1)]
+            for fila in range(tam):
+                for col in range(tam):
+                    if tablero.tablero[fila][col] == jugador_id:
+                        for df, dc in direcciones:
+                            nf, nc = fila + 2*df, col + 2*dc
+                            mf, mc = fila + df, col + dc
+                            if 0 <= nf < tam and 0 <= nc < tam and 0 <= mf < tam and 0 <= mc < tam:
+                                if tablero.tablero[nf][nc] == jugador_id and tablero.tablero[mf][mc] == 0:
+                                    bonus += 1
+            return bonus
+
+        # Detecta si hay una jugada que une dos regiones propias no conectadas (doble amenaza)
+        def detectar_doble_conexion(jugador_id):
+            contador = 0
+            for fila in range(tam):
+                for col in range(tam):
+                    if tablero.tablero[fila][col] == 0:
+                        conexiones = 0
+                        for df, dc in [(-1,0),(1,0),(0,-1),(0,1),(-1,1),(1,-1)]:
+                            nf, nc = fila + df, col + dc
+                            if 0 <= nf < tam and 0 <= nc < tam:
+                                if tablero.tablero[nf][nc] == jugador_id:
+                                    conexiones += 1
+                        if conexiones >= 2:
+                            contador += 1
+            return contador
+
         d_propio = distancia_conexion(self.jugador_id)
         d_oponente = distancia_conexion(self.oponente_id)
+        puente_bonus = contar_puentes(self.jugador_id)
+        doble_amenaza = detectar_doble_conexion(self.jugador_id)
 
-        centro_score = 0
         centro = tam // 2
+        centro_score = 0
         for fila in range(tam):
             for col in range(tam):
                 if tablero.tablero[fila][col] == self.jugador_id:
                     centro_score += max(0, 5 - (abs(fila - centro) + abs(col - centro)))
 
-        # Heurística híbrida
-        if hasattr(self, '_profundidad_actual') and self._profundidad_actual >= 2:
-            return (d_oponente - d_propio) * 10 + centro_score
+        amenaza_oponente = -1000 if d_oponente <= 1 else 0
+
+        if total_libres >= tam * tam * 0.7:
+            return (d_oponente - d_propio) * 8 + centro_score + puente_bonus * 3 + doble_amenaza * 5 + amenaza_oponente
+        elif total_libres >= tam * tam * 0.3:
+            return (d_oponente - d_propio) * 12 + centro_score + puente_bonus * 3 + doble_amenaza * 5 + amenaza_oponente
         else:
-            return (d_oponente - d_propio) * 10 + centro_score  # aquí podrías integrar más si quieres
-
-    def buscar_puentes_y_escaleras(self, tablero):
-        tam = tablero.tamano
-        patrones = []
-        direcciones = [(-1, 1), (1, -1), (1, 1), (-1, -1)]
-
-        for fila in range(tam):
-            for col in range(tam):
-                if tablero.tablero[fila][col] == self.jugador_id:
-                    for df, dc in direcciones:
-                        nf, nc = fila + 2 * df, col + 2 * dc
-                        mf, mc = fila + df, col + dc
-                        if (0 <= nf < tam and 0 <= nc < tam and
-                            0 <= mf < tam and 0 <= mc < tam):
-                            if tablero.tablero[nf][nc] == self.jugador_id and tablero.tablero[mf][mc] == 0:
-                                patrones.append((mf, mc))
-        return patrones
+            return (d_oponente - d_propio) * 15 + puente_bonus * 3 + doble_amenaza * 5 + amenaza_oponente
 
 
 class HexBoard:

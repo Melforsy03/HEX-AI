@@ -1,14 +1,14 @@
 
 import time
-from base_estrategia_completa import Player, HexBoard
+from player import Player, HexBoard
 
 def mostrar_tablero(tablero):
     for fila in tablero.tablero:
         print(' '.join(str(celda) for celda in fila))
     print()
 
-if __name__ == "__main__":
-    tamano_tablero = 4 # Puedes ajustar a 7, 9, etc.
+def partida():
+    tamano_tablero = 15# Puedes ajustar a 5, 7, 9, 15, etc.
     tablero = HexBoard(tamano_tablero)
     jugador1 = Player(1)
     jugador2 = Player(2)
@@ -56,3 +56,6 @@ if __name__ == "__main__":
     print(f"Total de movimientos: {movimientos_totales}")
     print(f"Promedio Jugador 1: {sum(tiempos_jugador1)/len(tiempos_jugador1):.3f} s")
     print(f"Promedio Jugador 2: {sum(tiempos_jugador2)/len(tiempos_jugador2):.3f} s")
+
+if __name__ == "__main__":
+    partida()
